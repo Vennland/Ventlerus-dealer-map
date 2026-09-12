@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>벤틀러스 딜러맵</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif; background:#0f0f1a; height:100vh; overflow:hidden; color:#e0e0f0; }
+  #header { background:linear-gradient(135deg,#1a1a2e,#16213e); padding:10px 16px; display:flex; align-items:center; gap:10px; border-bottom:2px solid #ff6b2b; height:56px; position:fixed; top:0; left:0; right:0; z-index:1000; }
+  .logo { width:34px; height:34px; object-fit:contain; flex-shrink:0; }
+  .htitle { font-size:16px; font-weight:700; color:#fff; }
+  .hsub { font-size:10px; color:#888; margin-top:1px; }
+  .badge { margin-left:auto; background:rgba(255,107,43,0.15); border:1px solid rgba(255,107,43,0.4); color:#ff6b2b; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
+  #container { display:flex; height:100vh; padding-top:56px; }
+  #sidebar { width:260px; flex-shrink:0; background:#12121f; border-right:1px solid #2a2a4a; display:flex; flex-direction:column; overflow:hidden; }
+  #search-wrap { padding:10px; border-bottom:1px solid #2a2a4a; }
+  #filter-wrap { padding:6px 10px; border-bottom:1px solid #2a2a4a; display:flex; gap:6px; }
+  .filter-btn { flex:1; padding:5px 2px; border-radius:6px; border:1px solid #3a3a5a; background:transparent; color:#888; font-size:10px; cursor:pointer; font-family:inherit; transition:all 0.15s; white-space:nowrap; }
+  .filter-btn.active-dealer { background:rgba(255,107,43,0.15); border-color:#ff6b2b; color:#ff6b2b; }
+  .filter-btn.active-as { background:rgba(79,142,247,0.15); border-color:#4f8ef7; color:#4f8ef7; }
+  #search-input { width:100%; background:#1e1e35; border:1px solid #3a3a5a; border-radius:8px; padding:8px 10px; color:#e0e0f0; font-size:12px; font-family:inherit; outline:none; }
+  #search-input:focus { border-color:#ff6b2b; }
+  #search-input::placeholder { color:#555; }
+  #list-wrap { flex:1; overflow-y:auto; padding:4px; -webkit-overflow-scrolling:touch; }
+  #list-wrap::-webkit-scrollbar { width:3px; }
+  #list-wrap::-webkit-scrollbar-thumb { background:#3a3a5a; border-radius:2px; }
+  .item { padding:9px 11px; border-radius:8px; cursor:pointer; margin-bottom:2px; border:1px solid transparent; transition:all 0.15s; }
+  .item:hover { background:#1e1e35; border-color:#3a3a5a; }
+  .item.active { background:rgba(255,107,43,0.1); border-color:rgba(255,107,43,0.4); }
+  .item.as-item.active { background:rgba(79,142,247,0.1); border-color:rgba(79,142,247,0.4); }
+  .pr-dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:#000; border:2px solid #fff; box-shadow:0 0 0 1px #444; margin-right:2px; vertical-align:middle; }
+  .item.priority-item { border-color:rgba(255,255,255,0.25); }
+  .item.priority-item.active { background:rgba(255,255,255,0.08); border-color:#fff; }
+  .item.priority-item.active .iname { color:#fff; }
+  .item .inum { font-size:9px; color:#444; margin-bottom:1px; }
+  .item .iname { font-size:12px; font-weight:600; color:#ddd; margin-bottom:2px; }
+  .item.active .iname { color:#ff6b2b; }
+  .item.as-item.active .iname { color:#4f8ef7; }
+  .item .iaddr { font-size:10px; color:#555; line-height:1.4; }
+  .item .iphone { font-size:10px; color:#4f8ef7; margin-top:2px; }
+  #no-result { display:none; text-align:center; padding:30px 16px; color:#555; font-size:12px; }
+  #map { flex:1; }
+  #loading { position:fixed; top:56px; left:0; right:0; bottom:0; background:rgba(10,10,20,0.95); z-index:3000; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; }
+  .spinner { width:40px; height:40px; border:3px solid #333; border-top-color:#ff6b2b; border-radius:50%; animation:spin 0.8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  #loading-text { color:#ccc; font-size:14px; font-weight:600; }
+  #progress-bar { width:220px; height:4px; background:#222; border-radius:2px; overflow:hidden; }
+  #progress-fill { height:100%; background:#ff6b2b; border-radius:2px; width:0%; transition:width 0.2s; }
+  #loading-sub { color:#555; font-size:11px; }
+  #toggle-btn { display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#ff6b2b; color:#fff; border:none; border-radius:20px; padding:10px 20px; font-size:13px; font-weight:700; z-index:2000; box-shadow:0 4px 12px rgba(255,107,43,0.4); cursor:pointer; white-space:nowrap; }
+  /* 팝업 */
+  .leaflet-popup-content-wrapper { background:#1a1a2e !important; border:1px solid #ff6b2b !important; border-radius:10px !important; box-shadow:0 4px 20px rgba(0,0,0,0.7) !important; }
+  .leaflet-popup-tip { background:#ff6b2b !important; }
+  .leaflet-popup-close-button { color:#ff6b2b !important; top:8px !important; right:8px !important; font-size:16px !important; }
+  .as-popup .leaflet-popup-content-wrapper { border-color:#4f8ef7 !important; }
+  .as-popup .leaflet-popup-tip { background:#4f8ef7 !important; }
+  .priority-popup .leaflet-popup-content-wrapper { border-color:#ffffff !important; }
+  .priority-popup .leaflet-popup-tip { background:#ffffff !important; }
+  .popup-tag { font-size:9px; margin-bottom:3px; }
+  .popup-name { font-size:13px; font-weight:700; margin-bottom:5px; }
+  .popup-addr { font-size:11px; color:#aaa; margin-bottom:4px; line-height:1.5; }
+  .popup-phone { font-size:11px; color:#4f8ef7; margin-bottom:8px; }
+  .popup-call { display:inline-block; padding:6px 14px; color:#fff; border-radius:12px; font-size:11px; font-weight:700; text-decoration:none; }
+  @media(max-width:600px) {
+    #sidebar { position:fixed; left:0; top:56px; bottom:0; z-index:500; transform:translateX(0); transition:transform 0.3s; }
+    #sidebar.closed { transform:translateX(-100%); }
+    #toggle-btn { display:block; }
+    .htitle { font-size:14px; }
+  }
+</style>
+</head>
+<body>
+<div id="header">
+  <img class="logo" src="data:image/png;base64,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" alt="벤틀러스 로고">
+  <div>
+    <div class="htitle">벤틀러스 딜러맵</div>
+    <div class="hsub">전국 공식 대리점 현황</div>
+  </div>
+  <div class="badge" id="badge">로딩중...</div>
+</div>
+<div id="loading">
+  <div class="spinner"></div>
+  <div id="loading-text">대리점 위치 불러오는 중...</div>
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+  <div id="loading-sub">잠시만 기다려주세요 (API 키 불필요)</div>
+</div>
+<div id="container">
+  <div id="sidebar">
+    <div id="search-wrap">
+      <input type="text" id="search-input" placeholder="🔍  대리점명 또는 지역 검색" oninput="filterList(this.value)">
+    </div>
+    <div id="filter-wrap">
+      <button class="filter-btn active-dealer" onclick="setFilter('all')">전체</button>
+      <button class="filter-btn" onclick="setFilter('dealer')">🟠 대리점</button>
+      <button class="filter-btn" onclick="setFilter('as')">🔵 스마트케어</button>
+    </div>
+    <div id="list-wrap"></div>
+    <div id="no-result">검색 결과가 없습니다</div>
+  </div>
+  <div id="map"></div>
+</div>
+<button id="toggle-btn" onclick="toggleSidebar()">📋 목록 보기</button>
+
+<script>
+const DEALERS = [
+  {type:"dealer",num:1,region:"경기북부",name:"벤틀러스 구리본사",phone:"070-7777-5968",addr:"경기 구리시 코스모스길 129-9, 1층(토평동)",lat:37.5802414028629,lng:127.142754916462},
+  {type:"dealer",num:2,region:"서울",name:"벤틀러스 강동직영점",phone:"070-4124-2815",addr:"서울 강동구 천중로 244 1층(길동)",lat:37.5404603045526,lng:127.147339597672},
+  {type:"dealer",num:3,region:"경기북부",name:"벤틀러스 구리토평직영점",phone:"070-7777-5966",addr:"경기도 구리시 이문안로 146 서강빌딩 1, 3층",lat:37.5907548,lng:127.1477136},
+  {type:"dealer",num:4,region:"경기북부",name:"가나스포츠",phone:"010-6644-1965/031-858-3007",addr:"경기 양주시 독바위로 5(덕정동)",lat:37.8409228382183,lng:127.06291312489},
+  {type:"dealer",num:5,region:"서울",name:"강변MTB",phone:"010-8982-4040",addr:"서울 마포구 토정로 278 용강주민센터 버스정류소앞",lat:37.5418426855404,lng:126.940488536709},
+  {type:"dealer",num:6,region:"서울",name:"고르고사고",phone:"010-9194-1600",addr:"서울 강동구 풍성로 150(성내동)",lat:37.5308607997942,lng:127.128581525342},
+  {type:"dealer",num:7,region:"광주",name:"광주전동킥보드",phone:"010-5252-6460",addr:"광주 서구 월드컵4강로 185, 1층 (쌍촌동)",lat:35.1527416115537,lng:126.86929246562},
+  {type:"dealer",num:8,region:"서울",name:"글로리바이크",phone:"0507-1465-9892",addr:"서울 노원구 동일로173가길 37 1층 (공릉동)",lat:37.619912914781,lng:127.073084939868},
+  {type:"dealer",num:9,region:"충청",name:"기브앤테이킥",phone:"041-533-3705",addr:"충남 아산시 온천대로 1417(온천동, 해태모빌리티)",lat:36.7834686936394,lng:126.995576912456},
+  {type:"dealer",num:10,region:"서울",name:"뉴바이크",phone:"010-8141-3332",addr:"서울 성북구 화랑로 113(하월곡동, 덕흥빌딩)",lat:37.6042700566609,lng:127.043979354641},
+  {type:"dealer",num:11,region:"경기남부",name:"대성자전거",phone:"010-4270-6744",addr:"경기도 안양시 동안구 경수대로 805, 건화상가 104호, 105호",lat:37.3915111788196,lng:126.94425070126},
+  {type:"dealer",num:12,region:"대전",name:"대전전동백화점",phone:"010-8440-0915",addr:"대전 동구 창조1길 43(원동)",lat:36.3277833383435,lng:127.435083656694},
+  {type:"dealer",num:13,region:"경북",name:"더바이크",phone:"010-2041-9371",addr:"경북 구미시 산호대로 793(옥계동)",lat:36.1371891852618,lng:128.416535298098},
+  {type:"dealer",num:14,region:"서울",name:"동훈스포츠",phone:"010-2104-5258",addr:"서울 강서구 화곡로 231(화곡동) 모토벨로프리미엄 서울화곡점",lat:37.5459092164111,lng:126.84467073598},
+  {type:"dealer",num:15,region:"경기남부",name:"두발달린자전거(남양점)",phone:"010-3752-8296",addr:"경기도 화성시 만세구 남양읍 시청로45번길 3-3",lat:37.2058075012796,lng:126.820959113745},
+  {type:"dealer",num:16,region:"경기남부",name:"두발달린자전거(새솔점)",phone:"010-3752-8296",addr:"경기 화성시 수노을1로 191 제상가1동 제지층 비104,105호(새솔동)",lat:37.2853300104831,lng:126.822266521655},
+  {type:"dealer",num:17,region:"경기남부",name:"두발이모빌리티",phone:"010-7550-6899",addr:"경기 부천시 소사구 은성로117번길 13 1층",lat:37.4745655358188,lng:126.804084820333},
+  {type:"dealer",num:18,region:"경기남부",name:"림바이크",phone:"010-3324-8283",addr:"경기 안성시 대학로 82, 1층",lat:37.0155235126751,lng:127.267112503002},
+  {type:"dealer",num:19,region:"경북",name:"링크바이크",phone:"010-3939-3042",addr:"경상북도 경산시 하양읍 대경로 757, 상가동 1층 101호",lat:35.9131181228615,lng:128.822626351001},
+  {type:"dealer",num:20,region:"대구",name:"모노클자전거",phone:"010-6541-1098",addr:"대구 서구 팔달로18길 23 1층(비산동)",lat:35.8880112630039,lng:128.558651297072},
+  {type:"dealer",num:21,region:"인천",name:"모두모빌리티",phone:"010-4177-5120",addr:"인천 서구 염곡로498번길 33 1층",lat:37.52785,lng:126.67207},
+  {type:"dealer",num:22,region:"서울",name:"모두의레저",phone:"010-8081-0335",addr:"서울 광진구 자양번영로2길 59 모두의레저",lat:37.5299854,lng:127.0783737},
+  {type:"dealer",num:23,region:"강원도",name:"모빌리티그라운드",phone:"010-7643-7755",addr:"강원 춘천시 후석로 73(석사동)",lat:37.8606315533942,lng:127.743806637721},
+  {type:"dealer",num:24,region:"경기북부",name:"모토벨로 남양주",phone:"010-9252-3883",addr:"경기 남양주시 다산중앙로20번길 10-22(다산동), 1층 101호 모토벨로 현대아울렛점",lat:37.6149830409125,lng:127.155936644556},
+  {type:"dealer",num:25,region:"대구",name:"모토벨로 대명점",phone:"010-7667-0710",addr:"대구 남구 성당로 88, 1층",lat:35.8444920137569,lng:128.56360961642},
+  {type:"dealer",num:26,region:"인천",name:"모토벨로 인천논현점",phone:"010-8917-1371",addr:"인천 남동구 소래역남로16번길 8-31 1층(논현동)",lat:37.3982081,lng:126.7359908},
+  {type:"dealer",num:27,region:"세종",name:"모토벨로프리미엄 이지모빌리티",phone:"010-2110-0284",addr:"세종 시청대로 163 리비에뷰 1층 106호(보람동)",lat:36.48112330185,lng:127.289426344923},
+  {type:"dealer",num:28,region:"대전",name:"몬바이크",phone:"042-585-0473",addr:"대전 중구 대흥로 99 1층 몬바이크(대흥동)",lat:36.3230206507231,lng:127.423430962536},
+  {type:"dealer",num:29,region:"세종",name:"몬바이크 세종점",phone:"010-6414-9260",addr:"세종 장군면 대교길 169 1층",lat:36.5106977362373,lng:127.224426878774},
+  {type:"dealer",num:30,region:"대구",name:"무브컴퍼니",phone:"010-5103-7719",addr:"대구 동구 이노밸리로26길 12 104호(각산동)",lat:35.8780395359483,lng:128.71190651079},
+  {type:"dealer",num:31,region:"경기남부",name:"바이시클스토리지 광명점",phone:"02-897-1777",addr:"경기 광명시 일직로99번안길 8(일직동)",lat:37.421026350649,lng:126.891370845316},
+  {type:"dealer",num:32,region:"경기남부",name:"바이크마켓",phone:"010-5257-3121",addr:"경기 수원시 팔달구 세지로 352 1층(지동)",lat:37.2819930953272,lng:127.025698033951},
+  {type:"dealer",num:33,region:"서울",name:"바이크매니아",phone:"010-2621-3066",addr:"서울 서초구 동작대로 192(방배동), 1층(방배동)",lat:37.4936742337064,lng:126.983097807017},
+  {type:"dealer",num:34,region:"서울",name:"바이크샵",phone:"010-3779-5795",addr:"서울 양천구 오목로 40(신월동)",lat:37.5217351764338,lng:126.842068372669},
+  {type:"dealer",num:35,region:"경기남부",name:"바이크셀링",phone:"010-9802-3363",addr:"경기 수원시 권선구 경수대로 353 1층",lat:37.2582953614631,lng:127.022551541465},
+  {type:"dealer",num:36,region:"경기남부",name:"바이크앤모어",phone:"010-3775-2849",addr:"경기 평택시 정암로 51 1층(이충동)",lat:37.0568522384232,lng:127.059512940611},
+  {type:"dealer",num:37,region:"서울",name:"바이크월드",phone:"010-2880-5987",addr:"서울 성동구 송정6길 24(송정동) 알톤스포츠",lat:37.5484990037242,lng:127.066425232778},
+  {type:"dealer",num:38,region:"경기남부",name:"바이크정원",phone:"010-6261-1315",addr:"경기 부천시 원미구 송내대로265번길 85 뱅뱅프라자 1층 109호",lat:37.5073450508912,lng:126.753910150941},
+  {type:"dealer",num:39,region:"대구",name:"바이크캠프",phone:"010-9516-9996",addr:"대구 남구 봉덕로1길 20 1층(봉덕동)",lat:35.8462960381721,lng:128.591451044392},
+  {type:"dealer",num:40,region:"경기북부",name:"바이크DC존",phone:"010-7738-7725",addr:"경기 고양시 일산동구 성현로 46-23(성석동 1269-20)",lat:37.7081841225648,lng:126.789732554714},
+  {type:"dealer",num:41,region:"전라",name:"백프로모빌리티",phone:"010-9719-9914",addr:"전북 전주시 완산구 효자로 305 지정빌딩 1층(중화산동)",lat:35.8192180703284,lng:127.118842024134},
+  {type:"dealer",num:42,region:"경기남부",name:"버디휠",phone:"010-3370-7140",addr:"경기 김포시 양촌읍 양곡2로60번길 68-15,101호",lat:37.657388780241,lng:126.630821372399},
+  {type:"dealer",num:43,region:"경기남부",name:"범바이크",phone:"010-8261-2240",addr:"경기 용인시 수지구 성복2로76번길 25-22(성복동)",lat:37.3155089553853,lng:127.078102899526},
+  {type:"dealer",num:44,region:"제주",name:"벤틀러스앤랜드크래프트 제주직영",phone:"0507-1377-2815",addr:"제주 제주시 논세길74 (내도동)",lat:33.4877620505669,lng:126.442732618839},
+  {type:"dealer",num:45,region:"서울",name:"벨로스토리",phone:"010-3974-8018",addr:"서울 중랑구 중랑역로 222, 1층(묵동)",lat:37.6131590801922,lng:127.075701561624},
+  {type:"dealer",num:46,region:"경기남부",name:"블루바이크",phone:"010-7377-2150/031-886-5420",addr:"경기 여주시 여흥로 18-3 1층(하동)",lat:37.2991064918944,lng:127.626465455623},
+  {type:"dealer",num:47,region:"경기남부",name:"비케이이라이더스",phone:"010-2725-1531",addr:"경기 시흥시 봉우재로41번길 25 1층(정왕동)",lat:37.3476345633132,lng:126.742568137938},
+  {type:"dealer",num:48,region:"경기남부",name:"사이클스팟 분당점",phone:"010-2291-8340",addr:"경기 성남시 분당구 금곡로23번길 12 BALI(구미동)",lat:37.3445996619971,lng:127.111793370806},
+  {type:"dealer",num:49,region:"경기북부",name:"삼천리자전거 구리역점",phone:"010-5314-1337/031-567-3456",addr:"경기 구리시 경춘로 274(수택동)",lat:37.6024642760315,lng:127.145623158831},
+  {type:"dealer",num:50,region:"서울",name:"삼천리자전거 바이크하우스",phone:"010-3611-3011",addr:"서울 관악구 신림로 376 대경빌딩 1층",lat:37.487910505816,lng:126.928932485171},
+  {type:"dealer",num:51,region:"광주",name:"샘바이크",phone:"010-8690-2845",addr:"광주 남구 금화로 436 늘푸른병원 1층 샘바이크(월산동)",lat:35.1448622824358,lng:126.891486400694},
+  {type:"dealer",num:52,region:"전라",name:"순천전기자전거&전기스쿠터",phone:"010-5052-1118",addr:"전남 순천시 해룡면 매안3길 44",lat:34.9294244824987,lng:127.552383406931},
+  {type:"dealer",num:53,region:"경기남부",name:"신나는 전동세상",phone:"010-4703-0424",addr:"경기 하남시 감일로88번길 30 102호(감일동)",lat:37.5086981989715,lng:127.151328708837},
+  {type:"dealer",num:54,region:"대구",name:"썬 모빌리티",phone:"010-8524-0200",addr:"대구 달서구 서당로 21 1층 썬 모빌리티(신당동)",lat:35.8538151405679,lng:128.495378585894},
+  {type:"dealer",num:55,region:"경기북부",name:"아름다운자전거",phone:"010-3156-0775",addr:"경기 고양시 일산동구 호수로 336 상가동 103(백석동)",lat:37.6376040943698,lng:126.787761513891},
+  {type:"dealer",num:56,region:"경기북부",name:"아이디바이크",phone:"070-7604-3279",addr:"경기 남양주시 다산중앙로172번길 44 에이플러스모닝프라자 108호(다산동)",lat:37.6282137039763,lng:127.157133254641},
+  {type:"dealer",num:57,region:"경북",name:"아이휠 구미점",phone:"010-6602-4480",addr:"경북 구미시 3공단1로 263-26 1층(임수동)",lat:36.1061276093372,lng:128.401646782348},
+  {type:"dealer",num:58,region:"전라",name:"아인스휠",phone:"010-4447-0546",addr:"전남 목포시 호남로64번길 10 1층(대안동)",lat:34.7934457564097,lng:126.385187717016},
+  {type:"dealer",num:59,region:"광주",name:"알톤바이크통",phone:"010-5397-6642",addr:"광주 광산구 풍영로 83 112호(월곡동)",lat:35.1793839178026,lng:126.810893143205},
+  {type:"dealer",num:60,region:"경남",name:"알톤스포츠 창원중앙점",phone:"010-7310-7006",addr:"경남 창원시 성산구 외동반림로 20 알톤스포츠자전거 창원중앙점",lat:35.2220851531286,lng:128.672806992425},
+  {type:"dealer",num:61,region:"서울",name:"에이벡",phone:"010-5303-6025",addr:"서울 송파구 올림픽로12길 25, 1층(잠실동)",lat:37.5093384367782,lng:127.08343275242},
+  {type:"dealer",num:62,region:"전라",name:"에이유(AU)테크 익산점",phone:"010-6691-2220",addr:"전북 익산시 인북로 168(남중동)",lat:35.9437910319076,lng:126.955374977768},
+  {type:"dealer",num:63,region:"전라",name:"에이유(AU)테크 전주점",phone:"010-6691-2220",addr:"전북 전주시 완산구 서원로 192 엠스테이션(효자동)",lat:35.8127747642815,lng:127.115432087339},
+  {type:"dealer",num:64,region:"서울",name:"엑스브랜드 직영점",phone:"010-7239-7007",addr:"서울특별시 중랑구 용마산로 670, 에이동 1층 105호(망우동, 신내역 프라디움 더 테라스)",lat:37.6119441454331,lng:127.102489000658},
+  {type:"dealer",num:65,region:"경기북부",name:"오남진접자전거",phone:"010-2324-2199",addr:"경기 남양주시 오남읍 경복대로17번안길 7-1",lat:37.7064863,lng:127.1935838},
+  {type:"dealer",num:66,region:"경기남부",name:"오반장 바이시클",phone:"031-901-9851",addr:"경기 김포시 양촌읍 황금로127번길 197 가동 1층",lat:37.6098569500488,lng:126.623422147573},
+  {type:"dealer",num:67,region:"서울",name:"용문MTB",phone:"010-5554-7450/02-2645-7792",addr:"서울 동작구 동작대로39길 22, 이수힐스테이트 단지내상가 1층 114-115호",lat:37.4946359814369,lng:126.981965983395},
+  {type:"dealer",num:68,region:"경기남부",name:"우산속자전거",phone:"010-5041-7787",addr:"경기 하남시 미사강변한강로 154 101호",lat:37.5759329841991,lng:127.192253957062},
+  {type:"dealer",num:69,region:"서울",name:"으니전동놀이터",phone:"010-3361-8059",addr:"서울 동대문구 제기로 100, 1층(청량리동)",lat:37.5865970594741,lng:127.044112631549},
+  {type:"dealer",num:70,region:"경북",name:"이지드라이브",phone:"010-4504-4036",addr:"경북 경산시 대학로 336 신일빌딩 1층(조영동)",lat:35.8393231616019,lng:128.757943901031},
+  {type:"dealer",num:71,region:"경기북부",name:"일렉트로휠",phone:"010-4716-0630",addr:"경기 고양시 덕양구 안진로 45 1층 101호(지축동)",lat:37.6463470905119,lng:126.918235484199},
+  {type:"dealer",num:72,region:"제주",name:"자전거빌리지",phone:"010-3100-1414",addr:"제주 제주시 고마로 1 1층(일도이동)",lat:33.5138947788193,lng:126.538611870888},
+  {type:"dealer",num:73,region:"경기남부",name:"자전거여행",phone:"010-4560-0181",addr:"경기 부천시 길주로 346-01, 101호 (중동 1087-4)",lat:37.5022468336731,lng:126.781065303548},
+  {type:"dealer",num:74,region:"서울",name:"자전거총각",phone:"010-9081-8581",addr:"서울 광진구 아차산39길 24 단독건물, 자전거총각",lat:37.53898,lng:127.07644},
+  {type:"dealer",num:75,region:"서울",name:"전기자전거 조",phone:"010-7977-7732",addr:"서울특별시 영등포구 당산로35길 4-13",lat:37.5293330635138,lng:126.89758431399},
+  {type:"dealer",num:76,region:"대구",name:"전동#(샵)",phone:"010-2551-4782",addr:"대구광역시 북구 산격로 87-1 전동샵(산격동)",lat:35.8980361245267,lng:128.606347991831},
+  {type:"dealer",num:77,region:"서울",name:"전동365",phone:"010-8472-6310",addr:"서울 중랑구 동일로 615 1층",lat:37.5853731265174,lng:127.079582627269},
+  {type:"dealer",num:78,region:"부산",name:"전동멀티샵M 부산진구 본점",phone:"010-5058-0071/010-4659-0071",addr:"부산 부산진구 신천대로 193-1 1층 전동멀티샵M(당감동)",lat:35.1591010709164,lng:129.049880269596},
+  {type:"dealer",num:79,region:"서울",name:"전동숲",phone:"010-8098-0609",addr:"서울 성북구 화랑로162-1 1층 우측(상월곡동)",lat:37.6063555976809,lng:127.048963488389},
+  {type:"dealer",num:80,region:"제주",name:"전동연구소",phone:"010-7557-2564",addr:"제주 제주시 귀아랑길 5 (연동)",lat:33.4928108015258,lng:126.497629274263},
+  {type:"dealer",num:81,region:"경기남부",name:"전동정원",phone:"010-7663-3046",addr:"경기 용인시 처인구 양지읍 양주로 36 1층",lat:37.2358983630378,lng:127.276017197654},
+  {type:"dealer",num:82,region:"충청",name:"전동트윈스 내포점",phone:"010-7499-1553",addr:"충남 홍성군 홍북읍 애향5길 31 1층 모토벨로 내포신도시점",lat:36.6589517798282,lng:126.685886911689},
+  {type:"dealer",num:83,region:"서울",name:"전동포",phone:"0507-1333-4781",addr:"서울 송파구 오금로31길 16-6 (방이동) 1층",lat:37.5072441179941,lng:127.122265853425},
+  {type:"dealer",num:84,region:"경기남부",name:"전동포 수원점",phone:"010-5598-4141",addr:"경기 수원시 장안구 정조로957번길 25-1 101호(영화동)",lat:37.2920691574977,lng:127.010083674596},
+  {type:"dealer",num:85,region:"경기북부",name:"전동풀악셀",phone:"010-4637-0866",addr:"경기 의정부시 의정부동 215-60",lat:37.7469090802235,lng:127.049523866309},
+  {type:"dealer",num:86,region:"부산",name:"전동핫플 금정점",phone:"010-4824-4904",addr:"부산 금정구 금강로 298 1층(장전동)",lat:35.2345411831074,lng:129.086187554811},
+  {type:"dealer",num:87,region:"부산",name:"전동핫플 사상점",phone:"010-5058-0071",addr:"부산 사상구 새벽시장로 70 1층 102호(감전동)",lat:35.154858738421,lng:128.981317676799},
+  {type:"dealer",num:88,region:"부산",name:"전동핫플 사하구점",phone:"010-7735-4258",addr:"부산 사하구 괴정로 38 1층",lat:35.1026347,lng:128.9682252},
+  {type:"dealer",num:89,region:"부산",name:"전동핫플 해운대점",phone:"0507-1363-8390",addr:"부산 해운대구 좌동로10번길 51-24 1층(중동)",lat:35.1683713322926,lng:129.171730029841},
+  {type:"dealer",num:90,region:"충청",name:"전동휠랜드",phone:"010-9523-1553",addr:"충남 천안시 서북구 미라3길 24 1층 유로휠천안점",lat:36.8016286173175,lng:127.131065623223},
+  {type:"dealer",num:91,region:"인천",name:"전동휫슬",phone:"010-9366-9007",addr:"인천 중구 하늘별빛로 65번길 7-15, 1동 1층 104호(중산동)",lat:37.4880678023094,lng:126.563598204292},
+  {type:"dealer",num:92,region:"경기북부",name:"제스트바이크",phone:"031-591-6030",addr:"경기 남양주시 화도읍 수레로 1096 1층",lat:37.6352025547148,lng:127.303739148835},
+  {type:"dealer",num:93,region:"경기남부",name:"제트모토",phone:"010-6449-3230",addr:"경기 이천시 부발읍 대산로 486",lat:37.2607080787633,lng:127.479628649216},
+  {type:"dealer",num:94,region:"충청",name:"준희네 전동클라쓰",phone:"0507-1349-6621",addr:"충북 청주시 흥덕구 1순환로 530 현대빌딩 1층 102호(봉명동)",lat:36.6454321478213,lng:127.463773120419},
+  {type:"dealer",num:95,region:"인천",name:"진지상사",phone:"032-299-5942",addr:"인천 남동구 호구포로 757(구월동)",lat:37.4499683435869,lng:126.718420070694},
+  {type:"dealer",num:96,region:"부산",name:"질주모빌리티 남구점 이반장",phone:"010-2725-7833",addr:"부산 남구 수영로208번길 15 1층 101, 102호(대연동)",lat:35.1342287903508,lng:129.089618935707},
+  {type:"dealer",num:97,region:"부산",name:"질주모빌리티 동래점",phone:"010-3734-0014",addr:"부산 동래구 아시아드대로247번길 9 1층(온천동)",lat:35.2060402839139,lng:129.067770642424},
+  {type:"dealer",num:98,region:"부산",name:"질주모빌리티 부산강서점",phone:"010-5653-6177",addr:"부산 강서구 명지국제11로 74 1층 질주모빌리티(명지동)",lat:35.1037758118277,lng:128.926519552346},
+  {type:"dealer",num:99,region:"인천",name:"케이로드(임학동)",phone:"010-4258-8289",addr:"인천 계양구 장제로 849(임학동) 1층 3호",lat:37.5433364075586,lng:126.736783717961},
+  {type:"dealer",num:100,region:"인천",name:"케이로드(주안동)",phone:"010-5355-6248",addr:"인천 미추홀구 주안로 182, 103호(주안동, 해마루 더펠리체)",lat:37.4631995664577,lng:126.690183113823},
+  {type:"dealer",num:101,region:"전라",name:"케이바이크",phone:"010-9947-1897",addr:"전남 영암군 삼호읍 대불주거5로 56",lat:34.753651248479,lng:126.453687961705},
+  {type:"dealer",num:102,region:"서울",name:"코디바이크",phone:"010-4090-2820",addr:"서울 구로구 경인로 342, 101호 코디바이크",lat:37.4969770647938,lng:126.858216361},
+  {type:"dealer",num:103,region:"울산",name:"코지모빌리티",phone:"010-7608-6211",addr:"울산 북구 진장로 8 102호(진장동)",lat:35.5614884665378,lng:129.357639912822},
+  {type:"dealer",num:104,region:"경기남부",name:"킥플 수원본점",phone:"010-3056-4504/031-202-0087",addr:"경기 수원시 영통구 권선로882번길 115-1 102, 103호(신동)",lat:37.2452786,lng:127.0416854},
+  {type:"dealer",num:105,region:"인천",name:"타이거바이크",phone:"010-5149-8245",addr:"인천 남동구 선수촌공원로17번길 8 1층 110호(구월동)",lat:37.4407805610675,lng:126.709050522836},
+  {type:"dealer",num:106,region:"경기남부",name:"통통통자전거",phone:"010-8217-7038",addr:"경기 부천시 오정구 수도로47번길 12-18(삼정동)",lat:37.5146596725867,lng:126.772197753281},
+  {type:"dealer",num:107,region:"서울",name:"퍼스널휠스",phone:"010-9820-0989",addr:"서울 강남구 논현로76길 34, 101호(역삼동)",lat:37.4977486147745,lng:127.041551836562},
+  {type:"dealer",num:108,region:"서울",name:"페달링 마포점",phone:"010-8549-1268",addr:"서울 마포구 신수로 105 신촌삼익아파트 상가동 페달링 마포점",lat:37.5506326825996,lng:126.9362343131},
+  {type:"dealer",num:109,region:"경남",name:"플레이모빌리티",phone:"0507-1423-3599",addr:"경남 진주시 진양호로 401 1층 102호",lat:35.1880729620273,lng:128.070802574509},
+  {type:"dealer",num:110,region:"경기남부",name:"피봇바이크",phone:"010-5610-9833/010-5041-9833",addr:"경기 안양시 동안구 관양로 73 1층(관양동)",lat:37.4019532338103,lng:126.955340318414},
+  {type:"dealer",num:111,region:"광주",name:"하이릭 전동킥보드",phone:"010-9922-9270/010-7576-1011",addr:"광주 북구 비엔날레로 112-1 1층(용봉동)",lat:35.1818077702767,lng:126.890652124609},
+  {type:"dealer",num:112,region:"강원도",name:"핫스팟",phone:"010-7424-1630",addr:"강원 강릉시 가작로 209 블랙커피 건물 1층(교동)",lat:37.7710640986455,lng:128.897990736982},
+  {type:"dealer",num:113,region:"서울",name:"항기바이크",phone:"02-3663-0966",addr:"서울 강서구 강서로 423(마곡동), 1층 101호",lat:37.5635059695343,lng:126.839361465026},
+  {type:"dealer",num:114,region:"경기남부",name:"핸디라이프",phone:"0507-1332-4883",addr:"경기 하남시 신장동 430-22",lat:37.5371100593181,lng:127.2066007675},
+  {type:"dealer",num:115,region:"서울",name:"홍제 전기자전거",phone:"010-9423-8925",addr:"서울특별시 서대문구 홍제내길 152, 1층(홍제동)",lat:37.5886243701652,lng:126.937503534345},
+  {type:"dealer",num:116,region:"충청",name:"휠앤킥 청주점",phone:"010-8952-3728",addr:"충북 청주시 청원구 무심동로 648-1 1층(내덕동)",lat:36.6568755714055,lng:127.475177837577},
+  {type:"dealer",num:117,region:"경기북부",name:"휠하우스",phone:"010-8288-6929",addr:"경기 양주시 옥정동로5바길 7-6 103호(옥정동)",lat:37.8169176442887,lng:127.096524055802},
+  {type:"dealer",num:118,region:"경기북부",name:"109모빌리티 김포점",phone:"010-8422-1091",addr:"경기 김포시 김포한강4로212번길 12 1층 101호(장기동)",lat:37.6496085222348,lng:126.660127591984},
+  {type:"dealer",num:119,region:"서울",name:"109모빌리티 마포본점",phone:"010-9765-9566",addr:"서울 마포구 월드컵로 164, 1층(성산동)",lat:37.5622992935812,lng:126.90495579097},
+  {type:"dealer",num:120,region:"서울",name:"109모빌리티 목동점",phone:"010-2112-0861",addr:"서울 양천구 은행정로 98, 103호(신정동)",lat:37.5284911537131,lng:126.858785637723},
+  {type:"dealer",num:121,region:"경기남부",name:"109모빌리티 안산점",phone:"010-7504-5987",addr:"경기 안산시 단원구 적금로 55 1층",lat:37.3130927931135,lng:126.825280076451},
+  {type:"dealer",num:122,region:"경기북부",name:"109모빌리티 일산점",phone:"010-8113-1091",addr:"경기 고양시 일산서구 일산로 656 1층 101호(대화동)",lat:37.6828947979199,lng:126.756590302431},
+  {type:"dealer",num:123,region:"경북",name:"BTS",phone:"010-7548-7009",addr:"경북 포항시 북구 삼흥로 86",lat:36.0695632,lng:129.3795423},
+  {type:"as",region:"경기남부",name:"경신BIKE",phone:"010-3788-7480",addr:"경기도 성남시 분당구 내정로166번길 7-6, 1층 2호(수내동, 코끼리상가)",lat:37.3731116768738,lng:127.120421848218},
+  {type:"as",region:"경기북부",name:"그린은성바이크",phone:"010-3762-1551",addr:"경기도 남양주시 진건읍 진건오남로 20-4",lat:37.652393489109,lng:127.179670203415},
+  {type:"as",region:"경북",name:"금고바이크",phone:"010-8547-0792",addr:"경상북도 구미시 상사동로 177, 1층(사곡동, 로얄빌딩)",lat:36.1005071233301,lng:128.358880046741},
+  {type:"as",region:"경기북부",name:"대륜스포츠",phone:"010-4900-8911",addr:"경기도 고양시 일산서구 중앙로 1371, 1층 71호",lat:37.6671243360506,lng:126.765471646111},
+  {type:"as",region:"경기북부",name:"대웅스포츠",phone:"010-5382-4339",addr:"경기도 남양주시 경춘로 411",lat:37.607177244131,lng:127.159439187254},
+  {type:"as",region:"충청",name:"드림스포츠",phone:"010-9886-9912",addr:"충청북도 진천군 진천읍 문화로 41-1",lat:36.8496444180247,lng:127.44393737105},
+  {type:"as",region:"경기남부",name:"레드바이크",phone:"010-9349-0179",addr:"경기도 안양시 동안구 관양로 289, B1호",lat:37.3977021650816,lng:126.976392140562},
+  {type:"as",region:"경기남부",name:"모토벨로 미니모터스 김포북변점",phone:"010-3390-0664",addr:"경기도 김포시 북변1로 16번길 19-12, 1동 1층 1호(북변동)",lat:37.6279507498684,lng:126.704035170047},
+  {type:"as",region:"경기북부",name:"바이시클프릭",phone:"010-6280-4096",addr:"경기도 남양주시 경춘로 915",lat:37.6331270547051,lng:127.20331383955},
+  {type:"as",region:"경기북부",name:"백석바이크",phone:"010-3674-2926",addr:"경기도 양주시 백석읍 월암로 139",lat:37.806524314636,lng:126.955201473266},
+  {type:"as",region:"경기북부",name:"벨라비에 중보",phone:"010-8312-0875",addr:"경기도 양주시 화합로 1471, 1층(고암동)",lat:37.8388563640679,lng:127.070622761089},
+  {type:"as",region:"경기북부",name:"별내엠티비",phone:"010-9050-7000",addr:"경기도 남양주시 별내3로 78",lat:37.6473842806079,lng:127.122137822401},
+  {type:"as",region:"경기남부",name:"분당 은솔스포츠",phone:"010-2081-8180",addr:"경기도 성남시 분당구 느티로77번길 6-8 1층, 지층(정자동)",lat:37.3688596933682,lng:127.113825069677},
+  {type:"as",region:"대전",name:"비비",phone:"010-3936-9089",addr:"대전광역시 유성구 원신흥남로11번길 32-17, 1층",lat:36.3343005450845,lng:127.336091724738},
+  {type:"as",region:"충청",name:"비케이바이크",phone:"010-7313-4741",addr:"충청북도 청주시 흥덕구 송화로108번길 53, 1층",lat:36.663823635991,lng:127.450163848228},
+  {type:"as",region:"서울",name:"빨간자전거",phone:"010-5050-1480",addr:"서울 강북구 삼양로 118-1(미아동) 1층",lat:37.6145306545944,lng:127.022352874648},
+  {type:"as",region:"경기북부",name:"삼천리자전거 고읍점",phone:"010-7417-6670",addr:"경기도 양주시 부흥로 1935, 1층 108호(광사동)",lat:37.7949512805999,lng:127.0770697389},
+  {type:"as",region:"경기북부",name:"삼천리자전거 녹양점",phone:"010-8242-9617",addr:"경기도 의정부시 비우로 105",lat:37.7586557163489,lng:127.038678032176},
+  {type:"as",region:"경기북부",name:"삼천리자전거 의정부점",phone:"010-9559-7567",addr:"경기도 의정부시 평화로426번길 53(의정부동 399-7)",lat:37.728577450366,lng:127.05049344934},
+  {type:"as",region:"경기남부",name:"삼천리자전거인덕원점",phone:"010-3720-5408",addr:"경기도 안양시 동안구 관악대로 421-1",lat:37.4051395002801,lng:126.969817201832},
+  {type:"as",region:"경기남부",name:"생활속의 자전거",phone:"010-3207-8911",addr:"경기도 광주시 오포읍 능평리 194-34",lat:37.3489412638565,lng:127.17085525598},
+  {type:"as",region:"경기남부",name:"선민바이크",phone:"010-6223-8511",addr:"경기도 김포시 대곶면 율생중앙로 35-1",lat:37.6515458956002,lng:126.583080041987},
+  {type:"as",region:"경기북부",name:"순풍자전거",phone:"010-8974-0495",addr:"경기도 남양주시 진접읍 장현로 11",lat:37.7127407821025,lng:127.178106471245},
+  {type:"as",region:"경기북부",name:"승우자전거",phone:"010-9172-1286",addr:"경기도 포천시 소흘읍 솔모루로 64",lat:37.8275061474066,lng:127.145672398571},
+  {type:"as",region:"서울",name:"알톤스포츠",phone:"010-5214-1884",addr:"서울특별시 중랑구 봉우재로 67",lat:37.5916656908198,lng:127.080727157007},
+  {type:"as",region:"경기북부",name:"엠티비원스포츠",phone:"010-9044-4489",addr:"경기도 의정부시 평화로 271-9",lat:37.7157508076692,lng:127.04689249479},
+  {type:"as",region:"경기남부",name:"오렌지자전거",phone:"010-4567-1020",addr:"경기 하남시 미사강변한강로158번길 77(망월동) 101호",lat:37.5755934038266,lng:127.188846558926},
+  {type:"as",region:"충청",name:"오송전기자전거",phone:"010-6880-6789",addr:"충청북도 청주시 흥덕구 오송읍 정중연제로 650",lat:36.6460264665552,lng:127.315997344032},
+  {type:"as",region:"경기북부",name:"옥정자전거",phone:"010-8956-4867",addr:"경기도 양주시 옥정로 152, 1동 101호(옥정동, 가하프라자)",lat:37.8149923373873,lng:127.091043010991},
+  {type:"as",region:"경기남부",name:"원카킥보드",phone:"010-5212-0610",addr:"경기도 성남시 수정구 성남대로 1193, 1층",lat:37.4362805036314,lng:127.128037624785},
+  {type:"as",region:"서울",name:"위드바이크",phone:"010-4772-6424",addr:"서울 도봉구 우이천로24길 6(쌍문동) 1층 101호",lat:37.6436461185148,lng:127.030759913274},
+  {type:"as",region:"경기북부",name:"이바이크 코리아",phone:"010-4159-0532",addr:"경기도 양주시 평화로 1475번길 575",lat:37.8216382334542,lng:127.029743505904},
+  {type:"as",region:"경기남부",name:"이프로 모빌리티",phone:"010-8281-9981",addr:"경기도 광주시 양벌로 98, 1층",lat:37.3874478621405,lng:127.254758022838},
+  {type:"as",region:"전라",name:"자전거포유",phone:"010-4326-8883",addr:"전북특별자치도 정읍시 학산로 89-8",lat:35.5598723265291,lng:126.874445356756},
+  {type:"as",region:"경기북부",name:"자찾사",phone:"010-8537-8488",addr:"경기도 의정부시 가능로 107",lat:37.7470043459044,lng:127.04301232214},
+  {type:"as",region:"경기남부",name:"제너럴마케팅그룹",phone:"010-4720-5265",addr:"경기도 안양시 동안구 경수대로 899, 103호",lat:37.3969996142907,lng:126.936635969415},
+  {type:"as",region:"경기북부",name:"준스포츠",phone:"010-4405-7358",addr:"경기도 양주시 옥정동로 173",lat:37.8225835715133,lng:127.099032579399},
+  {type:"as",region:"경기남부",name:"카리스자전거",phone:"010-4013-9045",addr:"경기도 성남시 분당구 양현로 539",lat:37.4145959542878,lng:127.141664241754},
+  {type:"as",region:"서울",name:"킥보드업",phone:"010-3528-9789",addr:"서울특별시 도봉구 노해로 264",lat:37.6511847,lng:127.0375118},
+  {type:"as",region:"서울",name:"킹바이크",phone:"010-4370-9119",addr:"서울특별시 중랑구 상봉로 100-1",lat:37.5949124713163,lng:127.093355924729},
+  {type:"as",region:"경기남부",name:"타볼래",phone:"010-8711-8079",addr:"경기도 성남시 중원구 성남대로997번길 27-22, 1층",lat:37.4179027479798,lng:127.125251543124},
+  {type:"as",region:"서울",name:"태영스포츠",phone:"010-8229-2016",addr:"서울 은평구 진흥로 76(녹번동) 1층",lat:37.6034969401716,lng:126.921780238103},
+  {type:"as",region:"서울",name:"파라드영등포점",phone:"010-6551-9951",addr:"서울특별시 영등포구 영등포로 17, 상가 101호",lat:37.5237210806448,lng:126.883484461229},
+  {type:"as",region:"울산",name:"팔일오바이크",phone:"010-3180-0815",addr:"울산광역시 동구 진성15나길 2",lat:35.5006070196403,lng:129.42299710384},
+  {type:"as",region:"경기남부",name:"하남자전거",phone:"010-5339-9358",addr:"경기도 하남시 대청로 50-1",lat:37.540407449046,lng:127.21797514629},
+  {type:"as",region:"경기북부",name:"3K 스포츠",phone:"010-5208-1626",addr:"경기도 남양주시 미금로 51",lat:37.6094425761745,lng:127.151804745513},
+];;;;;;;
+
+// 각 항목에 전역 인덱스 부여 (필터링된 목록에서도 markers 배열과 정확히 매칭되도록)
+DEALERS.forEach((d, i) => { d._i = i; });
+
+// 지도 초기화
+const map = L.map('map', { zoomControl:false }).setView([36.5, 127.8], 7);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution:'© OpenStreetMap contributors', maxZoom:19
+}).addTo(map);
+L.control.zoom({ position:'bottomright' }).addTo(map);
+
+let markers = [], current = [...DEALERS], activeIdx = null, currentFilter = 'all';
+
+// 최우선 노출 지점 (목록 최상단 + 검은색 마커)
+const PRIORITY_NAMES = ['벤틀러스 구리본사', '벤틀러스 강동직영점', '벤틀러스 구리토평직영점'];
+function isPriority(d) { return PRIORITY_NAMES.includes(d.name); }
+
+// 줌 레벨에 따른 마커 크기 계산 (축소하면 작게, 확대하면 커지다가 일정 줌부터 고정)
+const MARKER_MIN_ZOOM = 7;   // 이 줌 이하에서는 최소 크기 고정
+const MARKER_MAX_ZOOM = 13;  // 이 줌 이상에서는 최대 크기 고정
+const MARKER_MIN_SIZE = 14;
+const MARKER_MAX_SIZE = 30;
+function getMarkerSize(zoom) {
+  if (zoom <= MARKER_MIN_ZOOM) return MARKER_MIN_SIZE;
+  if (zoom >= MARKER_MAX_ZOOM) return MARKER_MAX_SIZE;
+  const t = (zoom - MARKER_MIN_ZOOM) / (MARKER_MAX_ZOOM - MARKER_MIN_ZOOM);
+  return MARKER_MIN_SIZE + (MARKER_MAX_SIZE - MARKER_MIN_SIZE) * t;
+}
+
+function makeIcon(type, priority, size) {
+  size = size || MARKER_MAX_SIZE;
+  const innerSize = size * 0.5;
+  const color = priority ? '#000000' : (type === 'dealer' ? '#FF6B2B' : '#4F8EF7');
+  const inner = `<img src="data:image/png;base64,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" style="width:${innerSize}px;height:${innerSize}px;transform:rotate(45deg);object-fit:contain;">`;
+  return L.divIcon({
+    className:'',
+    html:`<div style="width:${size}px;height:${size}px;background:${color};border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;">${inner}</div>`,
+    iconSize:[size,size], iconAnchor:[size/2,size], popupAnchor:[0,-size-2]
+  });
+}
+
+function refreshMarkerSizes() {
+  const size = getMarkerSize(map.getZoom());
+  markers.forEach((m, i) => {
+    if (!m) return;
+    const d = DEALERS[i];
+    m.marker.setIcon(makeIcon(d.type, isPriority(d), size));
+  });
+}
+map.on('zoomend', refreshMarkerSizes);
+
+function placeMarker(i, d, lat, lng) {
+  DEALERS[i].lat = lat;
+  DEALERS[i].lng = lng;
+
+  const priority = isPriority(d);
+  const marker = L.marker([lat, lng], { icon: makeIcon(d.type, priority, getMarkerSize(map.getZoom())) }).addTo(map);
+  const color = priority ? '#000000' : (d.type === 'dealer' ? '#ff6b2b' : '#4f8ef7');
+  const nameColor = priority ? '#ffffff' : color;
+  const tag = priority ? (d.name.includes('본사') ? '벤틀러스 본사' : '벤틀러스 직영') : (d.type === 'dealer' ? `🟠 대리점 · ${d.region}` : `🔵 스마트케어 · ${d.region}`);
+  const badge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:${color};margin-right:6px;flex-shrink:0;"><img src="data:image/png;base64,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" style="width:11px;height:11px;object-fit:contain;"></span>`;
+  marker.bindPopup(`
+    <div style="min-width:190px;">
+      <div style="font-size:9px;color:#aaa;margin-bottom:3px;">${tag}</div>
+      <div style="font-size:13px;font-weight:700;color:${nameColor};margin-bottom:5px;display:flex;align-items:center;">${badge}${d.name}</div>
+      <div style="font-size:11px;color:#aaa;margin-bottom:4px;">📍 ${d.addr}</div>
+      ${d.type === 'dealer' ? `<div style="font-size:11px;color:#4f8ef7;">📞 ${d.phone}</div>` : ''}
+    </div>`, { className: priority ? 'priority-popup' : (d.type === 'as' ? 'as-popup' : '') });
+
+  marker.on('click', () => setActive(i));
+  marker.on('popupclose', () => {
+    // 새로운 항목을 선택해서 닫힌 경우(activeIdx가 이미 바뀜)는 무시,
+    // 사용자가 직접 팝업을 닫은 경우(선택 해제)에만 전체 마커 복원
+    if (activeIdx === i) {
+      activeIdx = null;
+      document.getElementById(`item-${i}`)?.classList.remove('active');
+      applyMarkerVisibility();
+    }
+  });
+  markers[i] = { marker, lat, lng };
+}
+
+function geocodeAll() {
+  const total = DEALERS.length;
+  let done = 0;
+
+  function finishOne() {
+    done++;
+    document.getElementById('progress-fill').style.width = (done/total*100)+'%';
+    document.getElementById('loading-text').textContent = `위치 확인 중... ${done}/${total}`;
+    if (done >= total) {
+      document.getElementById('loading').style.display = 'none';
+      refreshMarkerSizes();
+      document.getElementById('badge').textContent = `대리점 ${DEALERS.filter(d=>d.type==='dealer').length}개`;
+    }
+  }
+
+  let fallbackDelay = 0;
+
+  DEALERS.forEach((d, i) => {
+    // 이미 정확한 좌표를 알고 있는 경우 → 즉시 마커 표시 (API 호출 불필요)
+    if (typeof d.lat === 'number' && typeof d.lng === 'number') {
+      placeMarker(i, d, d.lat, d.lng);
+      finishOne();
+      return;
+    }
+
+    // 좌표 미확보 항목만 Nominatim으로 지오코딩 (1초 제한 준수)
+    setTimeout(async () => {
+      try {
+        const q = encodeURIComponent(d.addr);
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&accept-language=ko&countrycodes=kr`);
+        const data = await res.json();
+        if (data.length > 0) {
+          placeMarker(i, d, parseFloat(data[0].lat), parseFloat(data[0].lon));
+        }
+      } catch(e) {
+        // 실패 시 마커 생략
+      }
+      finishOne();
+    }, fallbackDelay += 1200);
+  });
+}
+
+function renderSidebar(list) {
+  const wrap = document.getElementById('list-wrap');
+  const noResult = document.getElementById('no-result');
+  if (!list.length) { wrap.innerHTML=''; noResult.style.display='block'; return; }
+  noResult.style.display='none';
+  wrap.innerHTML = list.map((d) => {
+    const i = d._i;
+    const priority = isPriority(d);
+    const dot = priority ? `<span class="pr-dot"></span>` : (d.type==='dealer'?'🟠':'🔵');
+    const inumText = priority ? (d.type==='dealer'?`No.${d.num}`:'') : `${d.type==='dealer'?`No.${d.num} · `:''}${d.region}`;
+    return `
+    <div class="item${d.type==='as'?' as-item':''}${priority?' priority-item':''}" id="item-${i}" onclick="setActive(${i})">
+      <div class="inum">${inumText}</div>
+      <div class="iname">${dot} ${d.name}</div>
+      <div class="iaddr">${d.addr}</div>
+      ${d.type === 'dealer' ? `<div class="iphone">${d.phone}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function setActive(i) {
+  document.getElementById(`item-${activeIdx}`)?.classList.remove('active');
+  activeIdx = i;
+  document.getElementById(`item-${i}`)?.classList.add('active');
+  document.getElementById(`item-${i}`)?.scrollIntoView({behavior:'smooth',block:'nearest'});
+  if(markers[i]) {
+    // 선택한 마커만 또렷하게, 나머지는 흐리게 (완전히 숨기지 않음 → 주변 매장 위치도 계속 파악 가능)
+    markers.forEach((m, idx) => {
+      if(!m) return;
+      if(idx === i) {
+        if(!map.hasLayer(m.marker)) m.marker.addTo(map);
+        m.marker.setOpacity(1);
+        m.marker.setZIndexOffset(1000);
+      } else {
+        m.marker.setOpacity(DIM_OPACITY);
+        m.marker.setZIndexOffset(0);
+      }
+    });
+    map.setView([markers[i].lat, markers[i].lng], 16, {animate:true});
+    markers[i].marker.openPopup();
+  }
+  if(window.innerWidth<=600) { document.getElementById('sidebar').classList.add('closed'); document.getElementById('toggle-btn').textContent='📋 목록 보기'; }
+}
+
+function filterList(kw) {
+  const k = kw.trim().toLowerCase();
+  let list = currentFilter==='all' ? DEALERS : currentFilter==='dealer' ? DEALERS.filter(d=>d.type==='dealer') : DEALERS.filter(d=>d.type==='as' || isPriority(d));
+  current = k ? list.filter(d=>d.name.toLowerCase().includes(k)||d.addr.toLowerCase().includes(k)||d.region.toLowerCase().includes(k)) : list;
+  activeIdx = null;
+  renderSidebar(current);
+}
+
+const DIM_OPACITY = 0.35; // 선택되지 않은 마커의 흐림 정도
+
+function applyMarkerVisibility() {
+  markers.forEach((m, i) => {
+    if(!m) return;
+    const d = DEALERS[i];
+    m.marker.setOpacity(1);
+    m.marker.setZIndexOffset(0);
+    if(currentFilter==='all') { if(!map.hasLayer(m.marker)) m.marker.addTo(map); }
+    else if(currentFilter==='dealer' && d.type==='dealer') { if(!map.hasLayer(m.marker)) m.marker.addTo(map); }
+    else if(currentFilter==='as' && (d.type==='as' || isPriority(d))) { if(!map.hasLayer(m.marker)) m.marker.addTo(map); }
+    else { map.removeLayer(m.marker); }
+  });
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.className='filter-btn');
+  if(f==='all') document.querySelectorAll('.filter-btn')[0].className='filter-btn active-dealer';
+  else if(f==='dealer') document.querySelectorAll('.filter-btn')[1].className='filter-btn active-dealer';
+  else document.querySelectorAll('.filter-btn')[2].className='filter-btn active-as';
+  filterList(document.getElementById('search-input').value);
+  applyMarkerVisibility();
+}
+
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  sb.classList.toggle('closed');
+  document.getElementById('toggle-btn').textContent = sb.classList.contains('closed')?'📋 목록 보기':'✕ 닫기';
+}
+
+renderSidebar(DEALERS);
+geocodeAll();
+
+// 안전장치: 무슨 이유로든 8초 안에 로딩이 안 끝나면 강제로 로딩 화면을 닫음
+// (모바일에서 파일이 정상적인 브라우저가 아닌 미리보기 모드로 열린 경우 등 대비)
+setTimeout(() => {
+  const loading = document.getElementById('loading');
+  if (loading && loading.style.display !== 'none') {
+    loading.style.display = 'none';
+    document.getElementById('badge').textContent = `대리점 ${DEALERS.filter(d=>d.type==='dealer').length}개`;
+  }
+}, 8000);
+</script>
+</body>
+</html>
